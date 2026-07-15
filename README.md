@@ -4,6 +4,58 @@ Official implementation of the watermark injection and detection algorithms pres
 
 "Linguistic-Based Watermarking for Text Authentication" by _Xi Yang, Kejiang Chen, Weiming Zhang, Chang Liu, Yuang Qi, Jie Zhang, Han Fang, and Nenghai Yu_.  
 
+## Reproduce the core method in the current dlm environment
+
+The original modules pin an old dependency stack and import Chinese and English dependencies together. `models/watermark_compat.py` provides an English-only implementation for the current high-version environment while keeping the paper pipeline.
+
+The following paper-aligned components are active:
+
+1. The official NLTK Penn Treebank POS whitelist and English stop-word filter.
+2. Partially masked BERT embeddings for contextual candidate generation.
+3. Context similarity from the last eight BERT hidden layers.
+4. `glove-wiki-gigaword-100` for global word similarity.
+5. Two-sentence processing units for embedding and detection.
+6. SHA-256 bit encoding and the one-sided z-test in fast or precise mode.
+7. Paper defaults: `K=32`, `lambda=0.83`, `tau_sent=0.8`, and `tau_word=0.8`.
+
+The paper model paths are now active:
+
+* `/data/llm/bert-base-cased` for candidate generation and contextual similarity;
+* `/data/llm/roberta-large-mnli` for sentence-level MNLI entailment probability;
+* `/data/llm/glove-wiki-gigaword-100/glove-wiki-gigaword-100.gz` for global word similarity.
+
+The NLTK stopwords and `averaged_perceptron_tagger_eng` resources are installed under `/data/wangzhuoshang/nltk_data`. The sentence score follows the official executable repository, which uses the MNLI entailment probability at label 2. This is slightly more implementation-specific than the cosine-similarity notation in the paper. Exact paper result tables are not targeted.
+
+Run an end-to-end embedding and fast-detection check on GPU 0:
+
+```sh
+CUDA_VISIBLE_DEVICES=0 TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python run_watermark.py roundtrip --device cuda \
+  --text "A sufficiently long English passage to watermark and detect ..."
+```
+
+Embed text only:
+
+```sh
+CUDA_VISIBLE_DEVICES=0 TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python run_watermark.py embed --device cuda --input-file input.txt
+```
+
+Fast detection does not load semantic models and can run on CPU:
+
+```sh
+TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python run_watermark.py detect --detector fast --input-file watermarked.txt
+```
+
+Precise detection regenerates and filters synonym candidates, so it needs the models and is slower:
+
+```sh
+CUDA_VISIBLE_DEVICES=0 TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python run_watermark.py detect --detector precise --device cuda \
+  --input-file watermarked.txt
+```
+
 ## Requirements
 - Python 3.9
 - check requirements.txt
